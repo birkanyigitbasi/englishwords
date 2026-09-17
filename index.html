@@ -7,7 +7,7 @@
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; display: flex; justify-content: center; }
     .container { width: 100%; max-width: 450px; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-    h2 { margin-top: 0; color: #1a1a1a; text-align: center; }
+    h2, h3 { margin-top: 0; color: #1a1a1a; text-align: center; }
     .card { background: #1a1a1a; color: white; padding: 30px 20px; border-radius: 10px; text-align: center; margin: 20px 0; min-height: 120px; display: flex; flex-direction: column; justify-content: center; }
     .word { font-size: 24px; font-weight: bold; margin-bottom: 10px; color: #4facfe; }
     .meaning { font-size: 18px; color: #43e97b; margin-top: 10px; display: none; }
@@ -17,6 +17,15 @@
     .btn-sec { background: #e0e0e0; color: #333; }
     input { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
     .form-group { border-top: 1px solid #eee; margin-top: 20px; padding-top: 15px; }
+    
+    /* Kelime Listesi & Buton Stilleri */
+    .word-list { max-height: 200px; overflow-y: auto; margin-top: 10px; border: 1px solid #eee; border-radius: 6px; padding: 5px; }
+    .word-item { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
+    .word-item:last-child { border-bottom: none; }
+    .actions { display: flex; gap: 5px; }
+    .btn-sm { border: none; padding: 5px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; width: auto; margin: 0; }
+    .btn-edit { background: #ffc107; color: #000; }
+    .btn-delete { background: #ff4d4d; color: white; }
   </style>
 </head>
 <body>
@@ -34,11 +43,18 @@
   <button class="btn-main" onclick="getRandomWord()">Rastgele Kelime Getir 🎲</button>
 
   <div class="form-group">
-    <h3>Yeni Kelime Ekle</h3>
+    <h3 id="form-title">Yeni Kelime Ekle</h3>
     <input type="text" id="in-word" placeholder="Kelime / Phrasal Verb (Örn: hold together)">
     <input type="text" id="in-meaning" placeholder="Anlamı (Örn: kontrol altında tutmak)">
     <input type="text" id="in-example" placeholder="Örnek Cümle (İsteğe bağlı)">
-    <button class="btn-main" style="background:#28a745" onclick="addWord()">Listeye Ekle</button>
+    
+    <button class="btn-main" id="btn-save" style="background:#28a745" onclick="saveOrUpdateWord()">Listeye Ekle</button>
+    <button class="btn-sec" id="btn-cancel" style="display:none; background:#6c757d; color:white;" onclick="resetForm()">Düzenlemeyi İptal Et</button>
+  </div>
+
+  <div class="form-group">
+    <h3>Kayıtlı Kelimeler (<span id="word-count">0</span>)</h3>
+    <div class="word-list" id="list-container"></div>
   </div>
 </div>
 
@@ -49,35 +65,36 @@
   ];
 
   let currentWord = null;
+  let editingIndex = null; // Şu an düzenlenmekte olan kelimenin sırası
 
   function saveWords() {
     localStorage.setItem('myWords', JSON.stringify(words));
+    renderWordList();
   }
 
   function getRandomWord() {
-    if (words.length === 0) return;
+    if (words.length === 0) {
+      document.getElementById('card-word').innerText = "Kelime Bulunmuyor";
+      document.getElementById('card-meaning').innerText = "";
+      document.getElementById('card-example').innerText = "";
+      return;
+    }
 
-    // Sorulmamış kelimeler listesini hafızadan çek
     let unusedWords = JSON.parse(localStorage.getItem('unusedWords'));
 
-    // Eğer deste boşsa veya kalmadıysa tüm kelimelerle yeniden doldur
     if (!unusedWords || unusedWords.length === 0) {
       unusedWords = [...words];
     }
 
-    // Desteden rastgele bir kelime seç ve çekilen kelimeyi desteden çıkar
     const randomIndex = Math.floor(Math.random() * unusedWords.length);
     currentWord = unusedWords.splice(randomIndex, 1)[0];
 
-    // Güncellenmiş desteyi hafızaya kaydet
     localStorage.setItem('unusedWords', JSON.stringify(unusedWords));
 
-    // Ekranı güncelle
     document.getElementById('card-word').innerText = currentWord.word;
     document.getElementById('card-meaning').innerText = currentWord.meaning;
     document.getElementById('card-example').innerText = currentWord.example ? `"${currentWord.example}"` : '';
 
-    // Cevapları gizle
     document.getElementById('card-meaning').style.display = 'none';
     document.getElementById('card-example').style.display = 'none';
   }
@@ -91,30 +108,104 @@
     e.style.display = isHidden ? 'block' : 'none';
   }
 
-  function addWord() {
+  // Kelime Ekleme veya Güncelleme İşlemi
+  function saveOrUpdateWord() {
     const w = document.getElementById('in-word').value.trim();
     const m = document.getElementById('in-meaning').value.trim();
     const e = document.getElementById('in-example').value.trim();
 
     if (!w || !m) { alert('Lütfen kelime ve anlamını girin.'); return; }
 
-    const newWord = { word: w, meaning: m, example: e };
-    words.push(newWord);
+    if (editingIndex !== null) {
+      // DÜZENLEME MODU: Mevcut kaydı güncelle
+      words[editingIndex] = { word: w, meaning: m, example: e };
+      alert('Kelime başarıyla güncellendi!');
+    } else {
+      // YENİ EKLEME MODU: Yeni kelime ekle
+      const newWord = { word: w, meaning: m, example: e };
+      words.push(newWord);
+      
+      let unusedWords = JSON.parse(localStorage.getItem('unusedWords')) || [];
+      unusedWords.push(newWord);
+      localStorage.setItem('unusedWords', JSON.stringify(unusedWords));
+      alert('Kelime başarıyla eklendi!');
+    }
+
+    // Tura en güncel hallerinin girmesi için havuzu yenile
+    localStorage.removeItem('unusedWords');
     saveWords();
-
-    // Yeni eklenen kelimeyi aktif akıştaki desteye de ekle
-    let unusedWords = JSON.parse(localStorage.getItem('unusedWords')) || [];
-    unusedWords.push(newWord);
-    localStorage.setItem('unusedWords', JSON.stringify(unusedWords));
-
-    document.getElementById('in-word').value = '';
-    document.getElementById('in-meaning').value = '';
-    document.getElementById('in-example').value = '';
-    alert('Kelime başarıyla eklendi!');
+    resetForm();
     getRandomWord();
   }
 
-  // İlk açılışta kart getir
+  // Düzenle Butonuna Basıldığında Formu Doldur
+  function editWord(index) {
+    editingIndex = index;
+    const target = words[index];
+
+    document.getElementById('in-word').value = target.word;
+    document.getElementById('in-meaning').value = target.meaning;
+    document.getElementById('in-example').value = target.example || '';
+
+    document.getElementById('form-title').innerText = 'Kelimeyi Düzenle ✏️';
+    document.getElementById('btn-save').innerText = 'Güncelle';
+    document.getElementById('btn-save').style.background = '#ffc107';
+    document.getElementById('btn-save').style.color = '#000';
+    document.getElementById('btn-cancel').style.display = 'block';
+
+    // Sayfayı forma odakla
+    document.getElementById('in-word').focus();
+  }
+
+  // Formu İlk Haline Getir
+  function resetForm() {
+    editingIndex = null;
+    document.getElementById('in-word').value = '';
+    document.getElementById('in-meaning').value = '';
+    document.getElementById('in-example').value = '';
+
+    document.getElementById('form-title').innerText = 'Yeni Kelime Ekle';
+    document.getElementById('btn-save').innerText = 'Listeye Ekle';
+    document.getElementById('btn-save').style.background = '#28a745';
+    document.getElementById('btn-save').style.color = 'white';
+    document.getElementById('btn-cancel').style.display = 'none';
+  }
+
+  // Silme Fonksiyonu
+  function deleteWord(index) {
+    if (confirm(`"${words[index].word}" kelimesini silmek istediğinize emin misiniz?`)) {
+      words.splice(index, 1);
+      localStorage.removeItem('unusedWords');
+      saveWords();
+      resetForm();
+      getRandomWord();
+    }
+  }
+
+  // Kelime Listesini Ekran Üzerinde Çizdirme
+  function renderWordList() {
+    const container = document.getElementById('list-container');
+    document.getElementById('word-count').innerText = words.length;
+    container.innerHTML = '';
+
+    words.forEach((item, index) => {
+      const div = document.createElement('div');
+      div.className = 'word-item';
+      div.innerHTML = `
+        <div>
+          <strong>${item.word}</strong>: ${item.meaning}
+        </div>
+        <div class="actions">
+          <button class="btn-sm btn-edit" onclick="editWord(${index})">✏️</button>
+          <button class="btn-sm btn-delete" onclick="deleteWord(${index})">🗑️</button>
+        </div>
+      `;
+      container.appendChild(div);
+    });
+  }
+
+  // İlk çalıştırma işlemleri
+  renderWordList();
   getRandomWord();
 </script>
 
