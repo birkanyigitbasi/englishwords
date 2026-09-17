@@ -18,14 +18,16 @@
     input { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
     .form-group { border-top: 1px solid #eee; margin-top: 20px; padding-top: 15px; }
     
-    /* Kelime Listesi & Buton Stilleri */
-    .word-list { max-height: 200px; overflow-y: auto; margin-top: 10px; border: 1px solid #eee; border-radius: 6px; padding: 5px; }
+    /* Arama & Kelime Listesi Stilleri */
+    .search-box { background: #eef2f5; border: 2px solid #4facfe; }
+    .word-list { max-height: 220px; overflow-y: auto; margin-top: 10px; border: 1px solid #eee; border-radius: 6px; padding: 5px; }
     .word-item { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
     .word-item:last-child { border-bottom: none; }
     .actions { display: flex; gap: 5px; }
     .btn-sm { border: none; padding: 5px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; width: auto; margin: 0; }
     .btn-edit { background: #ffc107; color: #000; }
     .btn-delete { background: #ff4d4d; color: white; }
+    .empty-msg { text-align: center; color: #888; font-size: 13px; padding: 10px; }
   </style>
 </head>
 <body>
@@ -42,6 +44,7 @@
   <button class="btn-sec" onclick="toggleAnswer()">Cevabı Göster / Gizle</button>
   <button class="btn-main" onclick="getRandomWord()">Rastgele Kelime Getir 🎲</button>
 
+  <!-- Kelime Ekleme / Düzenleme Formu -->
   <div class="form-group">
     <h3 id="form-title">Yeni Kelime Ekle</h3>
     <input type="text" id="in-word" placeholder="Kelime / Phrasal Verb (Örn: hold together)">
@@ -52,8 +55,10 @@
     <button class="btn-sec" id="btn-cancel" style="display:none; background:#6c757d; color:white;" onclick="resetForm()">Düzenlemeyi İptal Et</button>
   </div>
 
+  <!-- Arama ve Arama Sonucu Listesi -->
   <div class="form-group">
-    <h3>Kayıtlı Kelimeler (<span id="word-count">0</span>)</h3>
+    <h3>Kelime Ara / Yönet (<span id="word-count">0</span>)</h3>
+    <input type="text" id="in-search" class="search-box" placeholder="🔍 Ara (Örn: hold veya kontrol)..." oninput="renderWordList()">
     <div class="word-list" id="list-container"></div>
   </div>
 </div>
@@ -65,7 +70,7 @@
   ];
 
   let currentWord = null;
-  let editingIndex = null; // Şu an düzenlenmekte olan kelimenin sırası
+  let editingIndex = null;
 
   function saveWords() {
     localStorage.setItem('myWords', JSON.stringify(words));
@@ -108,7 +113,6 @@
     e.style.display = isHidden ? 'block' : 'none';
   }
 
-  // Kelime Ekleme veya Güncelleme İşlemi
   function saveOrUpdateWord() {
     const w = document.getElementById('in-word').value.trim();
     const m = document.getElementById('in-meaning').value.trim();
@@ -117,28 +121,20 @@
     if (!w || !m) { alert('Lütfen kelime ve anlamını girin.'); return; }
 
     if (editingIndex !== null) {
-      // DÜZENLEME MODU: Mevcut kaydı güncelle
       words[editingIndex] = { word: w, meaning: m, example: e };
       alert('Kelime başarıyla güncellendi!');
     } else {
-      // YENİ EKLEME MODU: Yeni kelime ekle
       const newWord = { word: w, meaning: m, example: e };
       words.push(newWord);
-      
-      let unusedWords = JSON.parse(localStorage.getItem('unusedWords')) || [];
-      unusedWords.push(newWord);
-      localStorage.setItem('unusedWords', JSON.stringify(unusedWords));
       alert('Kelime başarıyla eklendi!');
     }
 
-    // Tura en güncel hallerinin girmesi için havuzu yenile
     localStorage.removeItem('unusedWords');
     saveWords();
     resetForm();
     getRandomWord();
   }
 
-  // Düzenle Butonuna Basıldığında Formu Doldur
   function editWord(index) {
     editingIndex = index;
     const target = words[index];
@@ -153,11 +149,9 @@
     document.getElementById('btn-save').style.color = '#000';
     document.getElementById('btn-cancel').style.display = 'block';
 
-    // Sayfayı forma odakla
     document.getElementById('in-word').focus();
   }
 
-  // Formu İlk Haline Getir
   function resetForm() {
     editingIndex = null;
     document.getElementById('in-word').value = '';
@@ -171,7 +165,6 @@
     document.getElementById('btn-cancel').style.display = 'none';
   }
 
-  // Silme Fonksiyonu
   function deleteWord(index) {
     if (confirm(`"${words[index].word}" kelimesini silmek istediğinize emin misiniz?`)) {
       words.splice(index, 1);
@@ -182,13 +175,24 @@
     }
   }
 
-  // Kelime Listesini Ekran Üzerinde Çizdirme
+  // Canlı Arama ve Filtreleme Fonksiyonu
   function renderWordList() {
     const container = document.getElementById('list-container');
+    const query = document.getElementById('in-search').value.toLowerCase().trim();
     document.getElementById('word-count').innerText = words.length;
     container.innerHTML = '';
 
-    words.forEach((item, index) => {
+    // Arama terimine göre eşleşen kelimeleri bul
+    const filteredWords = words.map((item, originalIndex) => ({ ...item, originalIndex }))
+                               .filter(item => item.word.toLowerCase().includes(query) || 
+                                               item.meaning.toLowerCase().includes(query));
+
+    if (filteredWords.length === 0) {
+      container.innerHTML = `<div class="empty-msg">${query ? 'Eşleşen kelime bulunamadı.' : 'Aramak için kelime yazın.'}</div>`;
+      return;
+    }
+
+    filteredWords.forEach((item) => {
       const div = document.createElement('div');
       div.className = 'word-item';
       div.innerHTML = `
@@ -196,8 +200,8 @@
           <strong>${item.word}</strong>: ${item.meaning}
         </div>
         <div class="actions">
-          <button class="btn-sm btn-edit" onclick="editWord(${index})">✏️</button>
-          <button class="btn-sm btn-delete" onclick="deleteWord(${index})">🗑️</button>
+          <button class="btn-sm btn-edit" onclick="editWord(${item.originalIndex})">✏️</button>
+          <button class="btn-sm btn-delete" onclick="deleteWord(${item.originalIndex})">🗑️</button>
         </div>
       `;
       container.appendChild(div);
