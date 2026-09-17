@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Flashcards</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; display: flex; justify-content: center; }
+    .container { width: 100%; max-width: 450px; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    h2 { margin-top: 0; color: #1a1a1a; text-align: center; }
+    .card { background: #1a1a1a; color: white; padding: 30px 20px; border-radius: 10px; text-align: center; margin: 20px 0; min-height: 120px; display: flex; flex-direction: column; justify-content: center; }
+    .word { font-size: 24px; font-weight: bold; margin-bottom: 10px; color: #4facfe; }
+    .meaning { font-size: 18px; color: #43e97b; margin-top: 10px; display: none; }
+    .example { font-size: 14px; color: #ccc; font-style: italic; margin-top: 8px; display: none; }
+    button { width: 100%; padding: 12px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; margin-bottom: 10px; font-weight: bold; }
+    .btn-main { background: #4facfe; color: white; }
+    .btn-sec { background: #e0e0e0; color: #333; }
+    .btn-ai { background: #8a2be2; color: white; }
+    input { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+    .form-group { border-top: 1px solid #eee; margin-top: 20px; padding-top: 15px; }
+    .status { font-size: 13px; color: #666; text-align: center; margin-top: 5px; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h2>AI Flashcards</h2>
+
+  <div class="card" id="card">
+    <div class="word" id="card-word">Henüz Kelime Yok</div>
+    <div class="meaning" id="card-meaning"></div>
+    <div class="example" id="card-example"></div>
+  </div>
+
+  <button class="btn-sec" onclick="toggleAnswer()">Cevabı Göster / Gizle</button>
+  <button class="btn-main" onclick="getRandomWord()">Rastgele Kelime Getir 🎲</button>
+
+  <div class="form-group">
+    <h3>Otomatik Kelime Ekle</h3>
+    <input type="text" id="api-key" placeholder="Gemini API Key Buraya Yapıştırılacak">
+    <input type="text" id="in-word" placeholder="Sadece Kelime Girin (Örn: tear apart)">
+    <button class="btn-ai" onclick="addWordWithAI()">Yapay Zeka ile Bul ve Ekle ✨</button>
+    <div class="status" id="status-text"></div>
+  </div>
+</div>
+
+<script>
+  let words = JSON.parse(localStorage.getItem('myWords')) || [
+    { word: "hold together", meaning: "kontrol altında tutmak, bir arada tutmak", example: "I'm trying to hold things together." }
+  ];
+
+  let currentWord = null;
+
+  document.getElementById('api-key').value = localStorage.getItem('geminiApiKey') || '';
+
+  function saveWords() {
+    localStorage.setItem('myWords', JSON.stringify(words));
+  }
+
+  function getRandomWord() {
+    if (words.length === 0) return;
+    const randomIndex = Math.floor(Math.random() * words.length);
+    currentWord = words[randomIndex];
+    
+    document.getElementById('card-word').innerText = currentWord.word;
+    document.getElementById('card-meaning').innerText = currentWord.meaning;
+    document.getElementById('card-example').innerText = currentWord.example ? `"${currentWord.example}"` : '';
+    
+    document.getElementById('card-meaning').style.display = 'none';
+    document.getElementById('card-example').style.display = 'none';
+  }
+
+  function toggleAnswer() {
+    if (!currentWord) return;
+    const m = document.getElementById('card-meaning');
+    const e = document.getElementById('card-example');
+    const isHidden = m.style.display === 'none';
+    m.style.display = isHidden ? 'block' : 'none';
+    e.style.display = isHidden ? 'block' : 'none';
+  }
+
+  async function addWordWithAI() {
+    const apiKey = document.getElementById('api-key').value.trim();
+    const wordInput = document.getElementById('in-word').value.trim();
+    const statusText = document.getElementById('status-text');
+
+    if (!apiKey) { alert('Lütfen önce Gemini API anahtarınızı girin.'); return; }
+    if (!wordInput) { alert('Lütfen bir kelime yazın.'); return; }
+
+    localStorage.setItem('geminiApiKey', apiKey);
+    statusText.innerText = 'Yapay zeka anlamı arıyor...';
+
+    const prompt = `İngilizce kelime veya phrasal verb: "${wordInput}". 
+    Bunun Türkçe anlamını ve 1 adet İngilizce örnek cümlesini bana SADECE aşağıdaki JSON formatında ver, başka hiçbir açıklama yazma:
+    {"meaning": "Türkçe karşılığı", "example": "İngilizce örnek cümle"}`;
+
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }]
+        })
+      });
+
+      const data = await response.json();
+      const rawText = data.candidates[0].content.parts[0].text;
+      
+      const cleanJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+      const result = JSON.parse(cleanJson);
+
+      words.push({
+        word: wordInput,
+        meaning: result.meaning,
+        example: result.example
+      });
+
+      saveWords();
+      document.getElementById('in-word').value = '';
+      statusText.innerText = 'Kelime başarıyla eklendi!';
+      getRandomWord();
+
+    } catch (error) {
+      console.error(error);
+      statusText.innerText = 'Hata oluştu! API anahtarını veya bağlantıyı kontrol edin.';
+    }
+  }
+
+  getRandomWord();
+</script>
+
+</body>
+</html>
