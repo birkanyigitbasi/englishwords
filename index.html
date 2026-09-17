@@ -16,7 +16,7 @@
     .btn-main { background: #4facfe; color: white; }
     .btn-sec { background: #e0e0e0; color: #333; }
     input { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
-    .form-group { border-top: 1px solid #eee; pt-3; margin-top: 20px; padding-top: 15px; }
+    .form-group { border-top: 1px solid #eee; margin-top: 20px; padding-top: 15px; }
   </style>
 </head>
 <body>
@@ -56,13 +56,27 @@
 
   function getRandomWord() {
     if (words.length === 0) return;
-    const randomIndex = Math.floor(Math.random() * words.length);
-    currentWord = words[randomIndex];
-    
+
+    // Sorulmamış kelimeler listesini hafızadan çek
+    let unusedWords = JSON.parse(localStorage.getItem('unusedWords'));
+
+    // Eğer deste boşsa veya kalmadıysa tüm kelimelerle yeniden doldur
+    if (!unusedWords || unusedWords.length === 0) {
+      unusedWords = [...words];
+    }
+
+    // Desteden rastgele bir kelime seç ve çekilen kelimeyi desteden çıkar
+    const randomIndex = Math.floor(Math.random() * unusedWords.length);
+    currentWord = unusedWords.splice(randomIndex, 1)[0];
+
+    // Güncellenmiş desteyi hafızaya kaydet
+    localStorage.setItem('unusedWords', JSON.stringify(unusedWords));
+
+    // Ekranı güncelle
     document.getElementById('card-word').innerText = currentWord.word;
     document.getElementById('card-meaning').innerText = currentWord.meaning;
     document.getElementById('card-example').innerText = currentWord.example ? `"${currentWord.example}"` : '';
-    
+
     // Cevapları gizle
     document.getElementById('card-meaning').style.display = 'none';
     document.getElementById('card-example').style.display = 'none';
@@ -84,8 +98,14 @@
 
     if (!w || !m) { alert('Lütfen kelime ve anlamını girin.'); return; }
 
-    words.push({ word: w, meaning: m, example: e });
+    const newWord = { word: w, meaning: m, example: e };
+    words.push(newWord);
     saveWords();
+
+    // Yeni eklenen kelimeyi aktif akıştaki desteye de ekle
+    let unusedWords = JSON.parse(localStorage.getItem('unusedWords')) || [];
+    unusedWords.push(newWord);
+    localStorage.setItem('unusedWords', JSON.stringify(unusedWords));
 
     document.getElementById('in-word').value = '';
     document.getElementById('in-meaning').value = '';
@@ -94,7 +114,7 @@
     getRandomWord();
   }
 
-  // İlk açılışta bir kelime getir
+  // İlk açılışta kart getir
   getRandomWord();
 </script>
 
